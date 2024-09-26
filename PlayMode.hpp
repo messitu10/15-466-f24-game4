@@ -2,6 +2,8 @@
 
 #include "Scene.hpp"
 #include "Sound.hpp"
+#include "Text.hpp"
+#include "State.hpp"
 
 #include <glm/glm.hpp>
 
@@ -23,24 +25,27 @@ struct PlayMode : Mode {
 	struct Button {
 		uint8_t downs = 0;
 		uint8_t pressed = 0;
-	} left, right, down, up;
-
-	//local copy of the game scene (so code can change it during gameplay):
-	Scene scene;
-
-	//hexapod leg to wobble:
-	Scene::Transform *hip = nullptr;
-	Scene::Transform *upper_leg = nullptr;
-	Scene::Transform *lower_leg = nullptr;
-	glm::quat hip_base_rotation;
-	glm::quat upper_leg_base_rotation;
-	glm::quat lower_leg_base_rotation;
-	float wobble = 0.0f;
-
-	glm::vec3 get_leg_tip_position();
+	} left, right, space;
 
 	//music coming from the tip of the leg (as a demonstration):
-	std::shared_ptr< Sound::PlayingSample > leg_tip_loop;
+	std::shared_ptr< Sound::PlayingSample > Beijing_sound;
+	std::shared_ptr< Sound::PlayingSample > Rich_sound;
+	std::shared_ptr< Sound::PlayingSample > Happy_sound;
+	std::shared_ptr< Sound::PlayingSample > Poker_sound;
+	std::shared_ptr< Sound::PlayingSample > KFC_sound;
+	bool sound_played;
+
+	uint32_t score = 0;
+	uint32_t choice = 3;
+
+	GameState states;
+	uint32_t current_game_state;
+	bool to_next_state;
+
+	void init_game_states();
+	void update_text();
+
+	Text context_text, left_choice, right_choice, instruction;
 	
 	//camera:
 	Scene::Camera *camera = nullptr;

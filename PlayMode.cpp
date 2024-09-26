@@ -8,63 +8,70 @@
 #include "gl_errors.hpp"
 #include "data_path.hpp"
 
+
 #include <glm/gtc/type_ptr.hpp>
 
 #include <random>
 
-GLuint hexapod_meshes_for_lit_color_texture_program = 0;
-Load< MeshBuffer > hexapod_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("hexapod.pnct"));
-	hexapod_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
-	return ret;
+// referenced the following codes/examples/documentation
+// https://github.com/cmu15466-gsilvera/15-466-f22-base4/blob/main/PlayMode.cpp
+
+Load< Sound::Sample > Beijing_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Beijing.opus"));
 });
 
-Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("hexapod.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		Mesh const &mesh = hexapod_meshes->lookup(mesh_name);
-
-		scene.drawables.emplace_back(transform);
-		Scene::Drawable &drawable = scene.drawables.back();
-
-		drawable.pipeline = lit_color_texture_program_pipeline;
-
-		drawable.pipeline.vao = hexapod_meshes_for_lit_color_texture_program;
-		drawable.pipeline.type = mesh.type;
-		drawable.pipeline.start = mesh.start;
-		drawable.pipeline.count = mesh.count;
-
-	});
+Load< Sound::Sample > Rich_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Rich.opus"));
 });
 
-Load< Sound::Sample > dusty_floor_sample(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("dusty-floor.opus"));
+Load< Sound::Sample > Happy_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Happy.opus"));
 });
 
-PlayMode::PlayMode() : scene(*hexapod_scene) {
-	//get pointers to leg for convenience:
-	for (auto &transform : scene.transforms) {
-		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
-	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
+Load< Sound::Sample > Poker_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Poker.opus"));
+});
 
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
+Load< Sound::Sample > KFC_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("KFC.opus"));
+});
 
-	//get pointer to camera for convenience:
-	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
-	camera = &scene.cameras.front();
 
-	//start music loop playing:
-	// (note: position will be over-ridden in update())
-	leg_tip_loop = Sound::loop_3D(*dusty_floor_sample, 1.0f, get_leg_tip_position(), 10.0f);
+
+PlayMode::PlayMode(){
+	auto origin = Scene::Transform();
+    camera = new Scene::Camera(&origin);
+
+	current_game_state = 0;
+	init_game_states();
+	
+	context_text.init();
+	left_choice.init();
+	right_choice.init();
+	instruction.init();
+
+	update_text();
 }
 
 PlayMode::~PlayMode() {
+}
+
+void PlayMode::init_game_states(){
+	states.addState("Test of Chinese as a Foreign Language (*tocfl)", " ", " ", "Press Space Key to Continue", 0);
+	states.addState("Volume Test: Qing Miao Shu Ni Ju Zhu De Cheng Shi", " ", " ", "Press Space Key to Continue", 0);
+	states.addState("Listening Session", " ", " ", "Press Space Key to Continue", 0);
+	states.addState("Where does the speaker come from?", "1: Beijing", "2: Shanghai", "Press 1 or 2 to Select and Space Key to Confirm", 1);
+	states.addState("What does this greeting mean?", "1: Happy New Year!", "2: Hope You Get RICH!", "Press 1 or 2 to Select and Space Key to Confirm", 2);
+	states.addState("What is the speaker saying?", "1. I'm sad.", "2. I'm happy!", "Press 1 or 2 to Select and Space Key to Confirm", 2);
+	states.addState("What is the speaker playing?", "1. Poker", "2. Mahjong", "Press 1 or 2 to Select and Space Key to Confirm", 1);
+	states.addState("Which restaurant will the speaker go to?", "1. KFC", "2. McDonald's", "Press 1 or 2 to Select and Space Key to Confirm", 1);
+}
+
+void PlayMode::update_text(){
+	context_text.set_text(states.game_state[current_game_state].context);
+	left_choice.set_text(states.game_state[current_game_state].left_text);
+	right_choice.set_text(states.game_state[current_game_state].right_text);
+	instruction.set_text(states.game_state[current_game_state].instruction);
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
@@ -73,116 +80,101 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		if (evt.key.keysym.sym == SDLK_ESCAPE) {
 			SDL_SetRelativeMouseMode(SDL_FALSE);
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_a) {
+		} else if (evt.key.keysym.sym == SDLK_1) {
 			left.downs += 1;
 			left.pressed = true;
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_d) {
+		} else if (evt.key.keysym.sym == SDLK_2) {
 			right.downs += 1;
 			right.pressed = true;
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_w) {
-			up.downs += 1;
-			up.pressed = true;
+		} else if (evt.key.keysym.sym == SDLK_SPACE) {
+			space.downs += 1;
+			space.pressed = true;
+			to_next_state = true;
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_s) {
-			down.downs += 1;
-			down.pressed = true;
-			return true;
-		}
+		} 
 	} else if (evt.type == SDL_KEYUP) {
-		if (evt.key.keysym.sym == SDLK_a) {
+		if (evt.key.keysym.sym == SDLK_1) {
 			left.pressed = false;
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_d) {
+		} else if (evt.key.keysym.sym == SDLK_2) {
 			right.pressed = false;
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_w) {
-			up.pressed = false;
+		} else if (evt.key.keysym.sym == SDLK_SPACE) {
+			space.pressed = false;
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_s) {
-			down.pressed = false;
-			return true;
-		}
+		} 
 	} else if (evt.type == SDL_MOUSEBUTTONDOWN) {
 		if (SDL_GetRelativeMouseMode() == SDL_FALSE) {
 			SDL_SetRelativeMouseMode(SDL_TRUE);
 			return true;
 		}
-	} else if (evt.type == SDL_MOUSEMOTION) {
-		if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
-			glm::vec2 motion = glm::vec2(
-				evt.motion.xrel / float(window_size.y),
-				-evt.motion.yrel / float(window_size.y)
-			);
-			camera->transform->rotation = glm::normalize(
-				camera->transform->rotation
-				* glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
-				* glm::angleAxis(motion.y * camera->fovy, glm::vec3(1.0f, 0.0f, 0.0f))
-			);
-			return true;
-		}
-	}
+	} 
 
 	return false;
 }
 
 void PlayMode::update(float elapsed) {
 
-	//slowly rotates through [0,1):
-	wobble += elapsed / 10.0f;
-	wobble -= std::floor(wobble);
-
-	hip->rotation = hip_base_rotation * glm::angleAxis(
-		glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 1.0f, 0.0f)
-	);
-	upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-		glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-		glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-
-	//move sound to follow leg tip position:
-	leg_tip_loop->set_position(get_leg_tip_position(), 1.0f / 60.0f);
-
-	//move camera:
-	{
-
-		//combine inputs into a move:
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
-
-		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
-
-		glm::mat4x3 frame = camera->transform->make_local_to_parent();
-		glm::vec3 frame_right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 frame_forward = -frame[2];
-
-		camera->transform->position += move.x * frame_right + move.y * frame_forward;
+	if(to_next_state && space.pressed == false){
+		if(current_game_state < states.game_state.size() - 1){
+			if(choice == states.game_state[current_game_state].correct_choice){
+				score += 1;
+			}
+			current_game_state += 1;
+			sound_played = false;
+			update_text();
+			to_next_state = false;
+		}
+		else{
+			context_text.showScore(score);
+			left_choice.disappear();
+			right_choice.disappear();
+			instruction.disappear();
+		}
 	}
 
-	{ //update listener to camera position:
-		glm::mat4x3 frame = camera->transform->make_local_to_parent();
-		glm::vec3 frame_right = frame[0];
-		glm::vec3 frame_at = frame[3];
-		Sound::listener.set_position_right(frame_at, frame_right, 1.0f / 60.0f);
+	if(left.pressed == true){
+		left_choice.highlight();
+		right_choice.reset();
+		choice = 1;
+	} else if(right.pressed == true){
+		right_choice.highlight();
+		left_choice.reset();
+		context_text.showScore(score);
+		choice = 2;
+	}
+
+	if(current_game_state == 3 && !sound_played){
+		Beijing_sound = Sound::play(*Beijing_sample, 1.0f, 20.0f);
+		sound_played = true;
+	}
+
+	if(current_game_state == 4 && !sound_played){
+		Rich_sound = Sound::play(*Rich_sample, 1.0f, 20.0f);
+		sound_played = true;
+	}
+
+	if(current_game_state == 5 && !sound_played){
+		Happy_sound = Sound::play(*Happy_sample, 1.0f, 20.0f);
+		sound_played = true;
+	}
+
+	if(current_game_state == 6 && !sound_played){
+		Poker_sound = Sound::play(*Poker_sample, 1.0f, 20.0f);
+		sound_played = true;
+	}
+
+	if(current_game_state == 7 && !sound_played){
+		Poker_sound = Sound::play(*KFC_sample, 1.0f, 20.0f);
+		sound_played = true;
 	}
 
 	//reset button press counters:
 	left.downs = 0;
 	right.downs = 0;
-	up.downs = 0;
-	down.downs = 0;
+	space.downs = 0;
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
@@ -204,33 +196,33 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
 
-	scene.draw(*camera);
+	{
+        float x = drawable_size.x * 0.2f;
+        float y = drawable_size.y * 0.3f;
+        float width = drawable_size.x * 0.75f;
+        left_choice.draw(drawable_size, width, glm::vec2(x, y), 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    }
 
-	{ //use DrawLines to overlay some text:
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
+	{
+        float x = drawable_size.x * 0.8f;
+        float y = drawable_size.y * 0.3f;
+        float width = drawable_size.x * 0.75f;
+       	right_choice.draw(drawable_size, width, glm::vec2(x, y), 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    }
 
-		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
-	}
+	{
+        float x = drawable_size.x * 0.5f;
+        float y = drawable_size.y * 0.6f;
+        float width = drawable_size.x * 0.75f;
+        context_text.draw(drawable_size, width, glm::vec2(x, y), 1.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+    }
+
+	{
+        float x = drawable_size.x * 0.5f;
+        float y = drawable_size.y * 0.1f;
+        float width = drawable_size.x * 0.75f;
+        instruction.draw(drawable_size, width, glm::vec2(x, y), 0.7f, glm::vec3(1.0f, 1.0f, 1.0f));
+    }
 	GL_ERRORS();
 }
 
-glm::vec3 PlayMode::get_leg_tip_position() {
-	//the vertex position here was read from the model in blender:
-	return lower_leg->make_local_to_world() * glm::vec4(-1.26137f, -11.861f, 0.0f, 1.0f);
-}
